@@ -1,0 +1,158 @@
+def get_input(prompt, min_val, max_val=None):
+    while True:
+        try:
+            raw_input_str = input(f"{prompt}: ").strip()
+            
+            if not raw_input_str:
+                print("Invalid input. Try again.")
+                continue
+                
+            if raw_input_str.startswith('-'):
+                print("Invalid input. Try again.")
+                continue
+            
+            val = int(raw_input_str)
+            
+            if max_val is not None:
+                if min_val <= val <= max_val:
+                    return val
+                else:
+                    print("Invalid input. Try again.")
+            else:
+                if val >= min_val:
+                    return val
+                else:
+                    print("Invalid input. Try again.")
+        except ValueError:
+            print("Invalid input. Try again.")
+
+def print_gantt(timeline):
+    if not timeline:
+        print("No processes to display.")
+        return
+
+    row_top = "Gantt Chart\n "
+    row_mid = "|"
+    times = [timeline[0][1]]
+    
+    for block in timeline:
+        pid, start, end = block
+        duration = end - start
+        
+        # Ang cell width ay eksaktong katumbas ng duration para tugma ang line/idle at burst time
+        cell_width = duration
+        
+        if pid == '+':
+            top_cell = " " * cell_width
+            mid_cell = "+" * cell_width
+        else:
+            top_cell = f"{pid}".center(cell_width)
+            mid_cell = "-" * cell_width
+            
+        row_top += f"{top_cell} "
+        row_mid += f"{mid_cell}|"
+        times.append(end)
+        
+    row_bottom_chars = [" "] * 300
+    current_pos = 0
+    
+    first_time_str = str(times[0])
+    for char in first_time_str:
+        row_bottom_chars[current_pos] = char
+        current_pos += 1
+        
+    idx = 0
+    for block in timeline:
+        duration = block[2] - block[1]
+        cell_width = duration
+            
+        current_pos += cell_width + 1
+        time_str = str(times[idx + 1])
+        
+        pos = current_pos - len(time_str) // 2
+        for i, char in enumerate(time_str):
+            if pos + i >= 0:
+                row_bottom_chars[pos + i] = char
+        idx += 1
+        
+    row_bottom = "".join(row_bottom_chars).rstrip()
+    
+    print("\n" + row_top)
+    print(row_mid)
+    print(row_bottom)
+
+def display_metrics(procs, timeline):
+    print(f"\n{'Process':<10} | {'AT':<5} | {'BT':<5} | {'PR':<5} | {'ET':<5} | {'TAT':<5} | {'WT':<5}")
+    print("-" * 55)
+    
+    total_tat = 0
+    total_wt = 0
+    total_bt = 0
+    
+    for p in sorted(procs, key=lambda x: int(x['id'][1:])):
+        tat = p['et'] - p['at']
+        wt = tat - p['bt']
+        total_tat += tat
+        total_wt += wt
+        total_bt += p['bt']
+        print(f"{p['id']:<10} | {p['at']:<5} | {p['bt']:<5} | {p['pr']:<5} | {p['et']:<5} | {tat:<5} | {wt:<5}")
+        
+    n = len(procs)
+    total_time = timeline[-1][2] if timeline else 1
+    cpu_utilization = (total_bt / total_time) * 100 if total_time > 0 else 0
+    
+    print(f"\nAverage Turnaround Time: {total_tat/n:.2f}")
+    print(f"Average Waiting Time: {total_wt/n:.2f}")
+    print(f"CPU Utilization: {cpu_utilization:.2f}%")
+    print("=" * 55)
+
+def non_preemptive_priority(processes):
+    procs = [dict(p) for p in processes]
+    n = len(procs)
+    completed = 0
+    current_time = 0
+    timeline = []
+    is_completed = [False] * n
+    
+    while completed < n:
+        available = [i for i in range(n) if not is_completed[i] and procs[i]['at'] <= current_time]
+        
+        if not available:
+            next_at = min([procs[i]['at'] for i in range(n) if not is_completed[i]])
+            timeline.append(('+', current_time, next_at))
+            current_time = next_at
+        else:
+            available.sort(key=lambda i: (procs[i]['pr'], procs[i]['at'], procs[i]['id']))
+            idx = available[0]
+            start = current_time
+            current_time += procs[idx]['bt']
+            timeline.append((procs[idx]['id'], start, current_time))
+            procs[idx]['et'] = current_time
+            is_completed[idx] = True
+            completed += 1
+            
+    return timeline, procs
+
+def main():
+    print("=== Non-Preemptive Priority Scheduling Simulator ===")
+    
+    num_processes = get_input("Enter number of processes", 3, 10)
+    processes = []
+    
+    for i in range(num_processes):
+        print(f"\n--- Process P{i+1} ---")
+        at = get_input(f"Enter Arrival Time for P{i+1}", 0, 20)
+        bt = get_input(f"Enter Burst Time for P{i+1}", 5, 15)
+        pr = get_input(f"Enter Priority for P{i+1}", 1, 100)
+        processes.append({'id': f'P{i+1}', 'at': at, 'bt': bt, 'pr': pr})
+        
+    print("\n\n" + "="*55)
+    print("           RESULTS FOR NON-PREEMPTIVE PRIORITY")
+    print("="*55)
+    
+    timeline, procs = non_preemptive_priority(processes)
+    print_gantt(timeline)
+    display_metrics(procs, timeline)
+
+if __name__ == "__main__":
+    main()
